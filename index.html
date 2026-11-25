@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de altitud de drones | ELEC-5308</title>
+<style>
+:root{--bg:#08111f;--panel:#101e31;--panel2:#14263d;--ink:#eaf2ff;--muted:#a9bad0;--cyan:#55d6e8;--green:#67e0ae;--orange:#ffbd69;--red:#ff7185;--line:#29415d}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#07101c,#0b1c30 60%,#10243a);color:var(--ink);font:16px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:56px max(6vw,22px) 42px;border-bottom:1px solid var(--line);background:radial-gradient(ellipse at 80% 10%,#16415a 0,transparent 45%)}
+.kicker{color:var(--cyan);font-weight:700;letter-spacing:.13em;text-transform:uppercase;font-size:.78rem}
+h1{font-size:clamp(2rem,5vw,3.8rem);line-height:1.08;margin:.5rem 0 1rem;max-width:900px}
+h2{font-size:1.55rem;margin:0 0 1rem}h3{margin:.2rem 0 .6rem;color:var(--cyan)}
+p{color:var(--muted)}.hero p{max-width:800px;font-size:1.08rem}
+nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}nav a{color:var(--ink);text-decoration:none;border:1px solid var(--line);border-radius:30px;padding:8px 14px;font-size:.9rem}nav a:hover{border-color:var(--cyan);color:var(--cyan)}
+main{max-width:1180px;margin:auto;padding:30px 20px 70px}section{margin:28px 0;padding:26px;background:rgba(16,30,49,.88);border:1px solid var(--line);border-radius:18px;scroll-margin-top:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}.card{padding:18px;border-radius:14px;background:var(--panel2);border:1px solid var(--line)}
+.metric{font-size:1.55rem;color:var(--green);font-weight:750}.small{font-size:.88rem;color:var(--muted)}
+.eq{padding:14px;background:#081626;border-left:3px solid var(--cyan);border-radius:8px;margin:12px 0;color:#f3f8ff;font-family:ui-monospace,monospace;overflow-wrap:anywhere}
+table{border-collapse:collapse;width:100%;margin:12px 0}td,th{padding:10px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--cyan)}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px}.control{background:#0b192a;padding:14px;border-radius:12px;border:1px solid var(--line)}
+label{display:flex;justify-content:space-between;gap:8px;font-weight:650}input[type=range]{width:100%;accent-color:var(--cyan);margin-top:12px}
+canvas{width:100%;height:300px;background:#071321;border:1px solid var(--line);border-radius:12px;display:block}
+button{background:var(--cyan);color:#05202a;border:0;border-radius:9px;padding:10px 16px;font-weight:750;cursor:pointer;margin:10px 8px 0 0}button.secondary{background:#233c58;color:var(--ink)}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#061321;padding:18px;border:1px solid var(--line);border-radius:12px;color:#cce5f4;overflow-x:auto}
+.pill{display:inline-block;padding:3px 10px;border-radius:30px;background:#173d3a;color:var(--green);font-size:.8rem;font-weight:700}
+footer{text-align:center;color:var(--muted);padding:20px}
+@media(max-width:600px){section{padding:18px}header{padding-top:38px}}
+</style>
+</head>
+<body>
+<header class="hero">
+ <div class="kicker">ELEC-5308 · Análisis de Sistemas</div>
+ <h1>Estabilización de altitud en drones de inspección</h1>
+ <p>Modelo dinámico vertical, linealización alrededor del vuelo estacionario y simulación interactiva de un controlador PID. Proyecto académico — Tema 7.</p>
+ <nav><a href="#contexto">01 Contexto</a><a href="#modelo">02 Modelo</a><a href="#analisis">03 Análisis</a><a href="#simulador">04 Simulador</a><a href="#estabilidad">05 Estabilidad</a></nav>
+</header>
+<main>
+<section id="contexto">
+ <div class="kicker">01 · Contexto industrial</div><h2>Arquitectura del sistema de control</h2>
+ <p>Un dron de inspección debe mantener una altura de referencia mientras realiza tareas de observación. Para este modelo se estudia únicamente el movimiento vertical; la dinámica lateral y la orientación quedan fuera del alcance.</p>
+ <div class="grid">
+  <div class="card"><h3>Planta</h3><p>Dinámica vertical del dron: masa, gravedad y resistencia aerodinámica.</p></div>
+  <div class="card"><h3>Sensor</h3><p>Altímetro/barómetro o sensor de distancia que estima la altura y la devuelve al controlador.</p></div>
+  <div class="card"><h3>Controlador</h3><p>PID que calcula una corrección de empuje a partir del error entre altura deseada y medida.</p></div>
+  <div class="card"><h3>Actuador</h3><p>Conjunto de motores y hélices que modifica el empuje total.</p></div>
+  <div class="card"><h3>Perturbaciones</h3><p>Corrientes de aire, cambios de carga y variaciones del empuje disponible.</p></div>
+ </div>
+</section>
+<section id="modelo">
+ <div class="kicker">02 · Modelado matemático y linealización</div><h2>De las leyes físicas al modelo</h2>
+ <p>Se define el eje vertical positivo hacia arriba. La fuerza de arrastre siempre se opone al movimiento, por lo que se representa con v|v|.</p>
+ <div class="eq">ΣF = m z¨ = T − mg − c ż|ż| + d(t)</div>
+ <div class="eq">m z¨ = T − mg − c ż|ż| + d(t)</div>
+ <p>En vuelo estacionario: v₀ = 0, z¨₀ = 0 y T₀ = mg. Se definen las variables de desviación δz = z − z₀ y δT = T − T₀.</p>
+ <div class="eq">δz¨ = (1/m)δT + (1/m)δd</div>
+ <p>El arrastre cuadrático no aparece en el modelo lineal de primer orden alrededor de v₀ = 0 porque su derivada respecto a la velocidad en ese punto es cero.</p>
+ <div class="eq">G(s) = ΔZ(s)/ΔT(s) = 1/(m s²)</div>
+ <h3>Representación en espacio de estados</h3>
+ <div class="eq">A = [[0, 1], [0, 0]]   B = [[0], [1/m]]<br>C = [1, 0]   D = [0]</div>
+ <p>El controlador actúa sobre la desviación de empuje: T(t) = mg + u(t), con u(t) = Kp e(t) + Ki∫e(t)dt − Kd ż(t).</p>
+</section>
+<section id="analisis">
+ <div class="kicker">03 · Análisis gráfico y representación</div><h2>Diagrama de bloques</h2>
+ <div class="grid" style="align-items:center;text-align:center">
+  <div class="card"><h3>Referencia</h3><div class="eq">R(s)</div></div>
+  <div class="card"><h3>Comparador</h3><div class="eq">E(s)=R(s)−Z(s)</div></div>
+  <div class="card"><h3>Controlador</h3><div class="eq">C(s)=Kp+Ki/s+Kd·s</div></div>
+  <div class="card"><h3>Planta</h3><div class="eq">G(s)=1/(m·s²)</div></div>
+  <div class="card"><h3>Salida</h3><div class="eq">Z(s)</div></div>
+ </div>
+ <p class="small">La salida medida se realimenta al comparador con signo negativo. El diagrama representa el modelo linealizado alrededor del vuelo estacionario.</p>
+ <h3>Función de transferencia en lazo cerrado</h3>
+ <div class="eq">GLC(s) = (Kd s² + Kp s + Ki)/(m s³ + Kd s² + Kp s + Ki)</div>
+</section>
+<section id="simulador">
+ <div class="kicker">04 · Simulador web interactivo</div><h2>Experimenta con los parámetros</h2>
+ <p>Modifica los parámetros y observa la respuesta numérica del modelo no lineal con PID. El integrador usa un paso de tiempo fijo y el empuje se limita a un intervalo académico de 0 a 40 N.</p>
+ <div class="controls">
+  <div class="control"><label>Masa m <output id="mval">2.00 kg</output></label><input id="m" type="range" min="1" max="4" step=".1" value="2"></div>
+  <div class="control"><label>Arrastre c <output id="cval">0.25 kg/m</output></label><input id="c" type="range" min="0" max="1" step=".01" value=".25"></div>
+  <div class="control"><label>Kp <output id="kpval">12</output></label><input id="kp" type="range" min="1" max="30" step=".5" value="12"></div>
+  <div class="control"><label>Ki <output id="kival">2</output></label><input id="ki" type="range" min=".1" max="10" step=".1" value="2"></div>
+  <div class="control"><label>Kd <output id="kdval">8</output></label><input id="kd" type="range" min=".1" max="20" step=".1" value="8"></div>
+  <div class="control"><label>Altura deseada <output id="rval">10 m</output></label><input id="r" type="range" min="2" max="20" step=".5" value="10"></div>
+ </div>
+ <button id="run">Actualizar simulación</button><button class="secondary" id="reset">Restablecer valores</button>
+ <div class="grid" style="margin:16px 0">
+  <div class="card"><div class="small">Altura final simulada</div><div class="metric" id="finalHeight">—</div></div>
+  <div class="card"><div class="small">Error final</div><div class="metric" id="finalError">—</div></div>
+  <div class="card"><div class="small">Polos del modelo lineal</div><div class="small" id="poles">—</div></div>
+ </div>
+ <h3>Respuesta de altura</h3><canvas id="plot" width="1000" height="340" aria-label="Gráfica de altura contra tiempo"></canvas>
+ <p class="small">La curva PID corresponde al modelo no lineal. La curva de referencia es la altura solicitada. El arrastre se conserva en la simulación.</p>
+</section>
+<section id="estabilidad">
+ <div class="kicker">05 · Estabilidad y conclusiones</div><h2>Análisis de estabilidad</h2>
+ <p>Para el modelo linealizado con PID, el polinomio característico es:</p>
+ <div class="eq">m s³ + Kd s² + Kp s + Ki = 0</div>
+ <p>Con m, Kp, Ki y Kd positivos, las condiciones de Routh-Hurwitz para este polinomio son:</p>
+ <div class="eq">Kd·Kp &gt; m·Ki</div>
+ <p>El valor final ante una referencia escalón es igual a la referencia, siempre que el lazo lineal sea estable y no haya saturación sostenida.</p>
+ <h3>Realimentación invertida</h3>
+ <p>Con realimentación positiva, el denominador pasa a ser m s³ − Kd s² − Kp s − Ki. Para los valores nominales, existe al menos un polo con parte real positiva, lo que indica inestabilidad del modelo lineal.</p>
+ <h3>Conclusiones</h3>
+ <ul>
+  <li>La segunda ley de Newton permite obtener el modelo vertical del dron.</li>
+  <li>La resistencia cuadrática hace que el modelo físico sea no lineal.</li>
+  <li>La linealización alrededor del vuelo estacionario produce una planta de doble integrador.</li>
+  <li>El PID regula la altura mediante la corrección del empuje respecto al equilibrio.</li>
+  <li>La estabilidad depende de las ganancias y de la realimentación negativa correctamente conectada.</li>
+ </ul>
+ <p class="small">Alcance: simulación académica simplificada. No representa un controlador certificado ni debe utilizarse para operar un dron real. Los resultados deben contrastarse con el script y las capturas originales de GNU Octave.</p>
+</section>
+</main>
+<footer>Proyecto de Investigación Aplicada · Sistemas de Control en la Industria · ELEC-5308</footer>
+<script>
+const ids=['m','c','kp','ki','kd','r'];
+const fmt=(id,v)=>id==='m'?Number(v).toFixed(2)+' kg':id==='c'?Number(v).toFixed(2)+' kg/m':id==='r'?Number(v).toFixed(1)+' m':Number(v).toFixed(1);
+function params(){return Object.fromEntries(ids.map(id=>[id,Number(document.getElementById(id).value)]))}
+function updateLabels(){ids.forEach(id=>document.getElementById(id+'val').textContent=fmt(id,document.getElementById(id).value))}
+function deriv(s,p){
+ const [z,v,I]=s, e=p.r-z;
+ const raw=p.kp*e+p.ki*I-p.kd*v;
+ const T=Math.max(0,Math.min(40,p.m*9.81+raw));
+ return [v,(T-p.m*9.81-p.c*v*Math.abs(v))/p.m,e];
+}
+function add(a,b,k){return a.map((v,i)=>v+k*b[i])}
+function simulate(p){
+ const dt=.01,N=2000;let s=[0,0,0],out=[];
+ for(let i=0;i<=N;i++){
+  const t=i*dt;out.push([t,s[0]]);
+  const k1=deriv(s,p),k2=deriv(add(s,k1,dt/2),p),k3=deriv(add(s,k2,dt/2),p),k4=deriv(add(s,k3,dt),p);
+  s=s.map((v,j)=>v+dt*(k1[j]+2*k2[j]+2*k3[j]+k4[j])/6);
+ }
+ return out;
+}
+function draw(data,r){
+ const c=document.getElementById('plot'),ctx=c.getContext('2d'),W=c.width,H=c.height;
+ ctx.clearRect(0,0,W,H);let ymax=Math.max(r*1.25,1,...data.map(d=>d[1]*1.08));ymax=Math.min(Math.max(ymax,2),100);
+ const L=65,R=20,T=20,B=42,pw=W-L-R,ph=H-T-B;
+ ctx.strokeStyle='#29415d';ctx.fillStyle='#a9bad0';ctx.lineWidth=1;ctx.font='13px system-ui';
+ for(let i=0;i<=5;i++){let y=T+ph*i/5;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(W-R,y);ctx.stroke();ctx.fillText((ymax*(1-i/5)).toFixed(1),8,y+4)}
+ for(let i=0;i<=5;i++){let x=L+pw*i/5;ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,T+ph);ctx.stroke();ctx.fillText((20*i/5).toFixed(0),x-4,H-15)}
+ ctx.fillText('Tiempo (s)',W/2,H-2);
+ let yr=T+ph*(1-r/ymax);ctx.strokeStyle='#ffbd69';ctx.setLineDash([8,6]);ctx.beginPath();ctx.moveTo(L,yr);ctx.lineTo(W-R,yr);ctx.stroke();ctx.setLineDash([]);
+ ctx.strokeStyle='#55d6e8';ctx.lineWidth=2.5;ctx.beginPath();
+ data.forEach((d,i)=>{let x=L+pw*d[0]/20,y=T+ph*(1-d[1]/ymax);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
+ ctx.fillStyle='#55d6e8';ctx.fillText('Altura simulada',L+10,T+15);ctx.fillStyle='#ffbd69';ctx.fillText('Referencia',L+145,T+15);
+}
+function cubicRoots(a,b,c,d){
+ // Solve a*s^3+b*s^2+c*s+d via Durand-Kerner complex arithmetic.
+ const add=(x,y)=>[x[0]+y[0],x[1]+y[1]], sub=(x,y)=>[x[0]-y[0],x[1]-y[1]], mul=(x,y)=>[x[0]*y[0]-x[1]*y[1],x[0]*y[1]+x[1]*y[0]], div=(x,y)=>{let q=y[0]*y[0]+y[1]*y[1];return [(x[0]*y[0]+x[1]*y[1])/q,(x[1]*y[0]-x[0]*y[1])/q]};
+ let roots=[[1,0],[-.5,.8660254],[-.5,-.8660254]];
+ for(let n=0;n<100;n++){roots=roots.map((z,i)=>{let f=add(add(add(mul(mul([a,0],z),z),mul([b,0],z)),[c,0]),[d,0]);let den=[1,0];roots.forEach((q,j)=>{if(i!==j)den=mul(den,sub(z,q))});return sub(z,div(f,den))})}
+ return roots;
+}
+function run(){
+ updateLabels();const p=params(),data=simulate(p);draw(data,p.r);
+ const end=data[data.length-1][1];document.getElementById('finalHeight').textContent=end.toFixed(3)+' m';
+ document.getElementById('finalError').textContent=(p.r-end).toFixed(3)+' m';
+ const roots=cubicRoots(p.m,p.kd,p.kp,p.ki);
+ document.getElementById('poles').textContent=roots.map(z=>`${z[0].toFixed(3)} ${z[1]>=0?'+':'−'} ${Math.abs(z[1]).toFixed(3)}j`).join('  |  ');
+}
+ids.forEach(id=>document.getElementById(id).addEventListener('input',updateLabels));
+document.getElementById('run').addEventListener('click',run);
+document.getElementById('reset').addEventListener('click',()=>{const v={m:2,c:.25,kp:12,ki:2,kd:8,r:10};ids.forEach(id=>document.getElementById(id).value=v[id]);run()});
+run();
+</script>
+</body></html>
